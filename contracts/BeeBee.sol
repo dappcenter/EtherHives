@@ -42,9 +42,11 @@ contract BeeBee is Ownable, UserBonus {
     uint256 public constant FIRST_BEE_AIRDROP_AMOUNT = 1000;
     uint256 public constant ADMIN_PERCENT = 10;
     uint256 public constant HONEY_DISCOUNT_PERCENT = 10;
+    uint256 public constant SUPERBEE_PERCENT_UNLOCK = 25;
     uint256[] public REFERRAL_PERCENT_PER_LEVEL = [5, 3, 2];
     uint256[] public REFERRAL_POINT_PERCENT = [50, 25, 0];
 
+    uint256 public maxBalance;
     uint256 public totalPlayers;
     mapping(address => Player) public players;
 
@@ -54,6 +56,11 @@ contract BeeBee is Ownable, UserBonus {
     event ReferrerPaid(address indexed user, address indexed referrer, uint256 indexed level, uint256 amount);
     event MedalAwarded(address indexed user, uint256 indexed medal);
     event QualityUpdated(address indexed user, uint256 indexed quality);
+
+    function superBeeUnlocked() public view returns(bool) {
+        uint256 adminWithdrawed = players[owner()].totalWithdrawed;
+        return address(this).balance.add(adminWithdrawed) <= maxBalance.mul(100 - SUPERBEE_PERCENT_UNLOCK).div(100);
+    }
 
     function referrals(address user) public view returns(address[] memory) {
         return players[user].referrals;
@@ -125,6 +132,9 @@ contract BeeBee is Ownable, UserBonus {
         }
 
         _addToBonusIfNeeded(msg.sender);
+
+        uint256 adminWithdrawed = players[owner()].totalWithdrawed;
+        maxBalance = Math.max(maxBalance, address(this).balance.add(adminWithdrawed));
     }
 
     function withdraw(uint256 amount) public {
@@ -160,6 +170,12 @@ contract BeeBee is Ownable, UserBonus {
 
         require(bee < 2 || player.bees[bee - 1] == MAX_BEES_PER_TARIFF);
         if (player.bees[bee] == 0) {
+            if (bee == 7) {
+                require(player.medals >= 9);
+            }
+            if (bee == 8) {
+                require(superBeeUnlocked());
+            }
             _payWithWaxOnly(msg.sender, BEES_LEVELS_PRICES[bee]);
         }
 
