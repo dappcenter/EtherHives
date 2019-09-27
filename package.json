@@ -4,7 +4,7 @@
   "description": "",
   "repository": {
     "type": "git",
-    "url": "git@github.com:beebee/BeeBee.git"
+    "url": "git@github.com:EtherHives/BeeBee.git"
   },
   "license": "MIT",
   "dependencies": {
