@@ -11,7 +11,7 @@ contract UserBonus {
     uint256 public constant BONUS_PERCENTS_PER_DAY = 1;
 
     struct UserBonusData {
-        uint256 totalPaid;
+        uint256 threadPaid;
         uint256 lastPaidTime;
         uint256 numberOfUsers;
         mapping(address => uint256) userPaid;
@@ -22,14 +22,24 @@ contract UserBonus {
     event BonusPaid(uint256 users, uint256 amount);
     event UserAddedToBonus(address indexed user);
 
-    function payRepresentativeBonus() public {
-        require(bonus.numberOfUsers > 0);
+    modifier payRepBonusIfNeeded {
+        payRepresentativeBonus();
+        _;
+    }
 
-        uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
-            .mul(now.sub(bonus.lastPaidTime)).div(1 days);
-        bonus.totalPaid = bonus.totalPaid.add(reward);
-        bonus.lastPaidTime = now;
-        emit BonusPaid(bonus.numberOfUsers, reward);
+    modifier onlyRepBonusUser {
+        require(userAddedToBonus(msg.sender));
+        _;
+    }
+
+    function payRepresentativeBonus() public {
+        if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 days) {
+            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
+                .mul(block.timestamp.sub(bonus.lastPaidTime)).div(1 days);
+            bonus.threadPaid = bonus.threadPaid.add(reward.div(bonus.numberOfUsers));
+            bonus.lastPaidTime = block.timestamp;
+            emit BonusPaid(bonus.numberOfUsers, reward);
+        }
     }
 
     function userAddedToBonus(address user) public view returns(bool) {
@@ -40,17 +50,21 @@ contract UserBonus {
         if (!userAddedToBonus(user)) {
             return 0;
         }
-        return bonus.totalPaid.sub(bonus.userPaid[user]).div(bonus.numberOfUsers);
+        return bonus.threadPaid.sub(bonus.userPaid[user]);
     }
 
-    function retrieveBonus() public {
-        msg.sender.transfer(userBonus(msg.sender));
-        bonus.userPaid[msg.sender] = bonus.totalPaid;
+    function retrieveBonus() public onlyRepBonusUser payRepBonusIfNeeded {
+        uint256 amount = userBonus(msg.sender);
+        require(amount > 0, "Nothing to retrieve");
+        bonus.userPaid[msg.sender] = bonus.threadPaid;
+        msg.sender.transfer(amount);
     }
 
     function _addUserToBonus(address user) internal {
+        payRepresentativeBonus();
+
         require(bonus.userPaid[user] == 0);
-        bonus.userPaid[user] = bonus.totalPaid;
+        bonus.userPaid[user] = bonus.threadPaid;
         bonus.numberOfUsers = bonus.numberOfUsers.add(1);
         emit UserAddedToBonus(user);
     }

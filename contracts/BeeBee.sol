@@ -76,12 +76,13 @@ contract BeeBee is Ownable, UserBonus {
         return address(0);
     }
 
-    function deposit(address ref) public payable {
+    function deposit(address ref) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
         address refAddress = referrerOf(msg.sender, ref);
 
         // Register player
         if (!player.registered) {
+            require(msg.sender != owner(), "Owner can't play");
             player.registered = true;
             player.bees[0] = MAX_BEES_PER_TARIFF;
             totalPlayers++;
@@ -147,19 +148,22 @@ contract BeeBee is Ownable, UserBonus {
         emit Withdrawed(msg.sender, value);
     }
 
-    function collect() public {
+    function collect() public payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
         uint256 collected = earned(msg.sender);
-        player.balanceHoney = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
-        player.balanceWax = collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
-        player.lastTimeCollected = now;
         if (!player.airdropCollected) {
             player.airdropCollected = true;
+            collected = collected.sub(FIRST_BEE_AIRDROP_AMOUNT);
+            player.balanceWax = player.balanceWax.add(FIRST_BEE_AIRDROP_AMOUNT);
         }
+
+        player.balanceHoney = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        player.balanceWax = collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        player.lastTimeCollected = block.timestamp;
     }
 
-    function buyBees(uint256 bee, uint256 count) public payable {
+    function buyBees(uint256 bee, uint256 count) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
         if (msg.value > 0) {
@@ -176,7 +180,7 @@ contract BeeBee is Ownable, UserBonus {
             if (bee == 8) {
                 require(superBeeUnlocked());
             }
-            _payWithWaxOnly(msg.sender, BEES_LEVELS_PRICES[bee]);
+            _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
         }
 
         require(player.bees[bee].add(count) <= MAX_BEES_PER_TARIFF);
@@ -184,10 +188,10 @@ contract BeeBee is Ownable, UserBonus {
         _payWithWaxAndHoney(msg.sender, BEES_PRICES[bee].mul(count));
     }
 
-    function updateQualityLevel() public payable {
+    function updateQualityLevel() public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
-        require(player.qualityLevel < QUALITIES_COUNT);
+        require(player.qualityLevel < QUALITIES_COUNT - 1);
         _payWithHoneyOnly(msg.sender, QUALITY_PRICE[player.qualityLevel + 1]);
         player.qualityLevel++;
         emit QualityUpdated(msg.sender, player.qualityLevel);
@@ -208,11 +212,11 @@ contract BeeBee is Ownable, UserBonus {
         }
 
         return total
-            .mul(now.sub(player.lastTimeCollected))
+            .mul(block.timestamp.sub(player.lastTimeCollected))
             .div(30 days);
     }
 
-    function collectMedals(address user) public {
+    function collectMedals(address user) public payRepBonusIfNeeded {
         Player storage player = players[user];
 
         for (uint i = player.medals; i < MEDALS_COUNT; i++) {
