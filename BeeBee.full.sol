@@ -226,6 +226,7 @@ pragma solidity ^0.5.0;
 
 
 
+
 contract UserBonus {
 
     using SafeMath for uint256;
@@ -233,9 +234,10 @@ contract UserBonus {
     uint256 public constant BONUS_PERCENTS_PER_DAY = 1;
 
     struct UserBonusData {
-        uint256 totalPaid;
+        uint256 threadPaid;
         uint256 lastPaidTime;
         uint256 numberOfUsers;
+        mapping(address => bool) userRegistered;
         mapping(address => uint256) userPaid;
     }
 
@@ -244,35 +246,43 @@ contract UserBonus {
     event BonusPaid(uint256 users, uint256 amount);
     event UserAddedToBonus(address indexed user);
 
-    function payRepresentativeBonus() public {
-        require(bonus.numberOfUsers > 0);
-
-        uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
-            .mul(now.sub(bonus.lastPaidTime)).div(1 days);
-        bonus.totalPaid = bonus.totalPaid.add(reward);
-        bonus.lastPaidTime = now;
-        emit BonusPaid(bonus.numberOfUsers, reward);
+    modifier payRepBonusIfNeeded {
+        payRepresentativeBonus();
+        _;
     }
 
-    function userAddedToBonus(address user) public view returns(bool) {
-        return bonus.userPaid[user] > 0;
+    function payRepresentativeBonus() public {
+        if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 days) {
+            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
+                .mul(block.timestamp.sub(bonus.lastPaidTime)).div(1 days);
+            bonus.threadPaid = bonus.threadPaid.add(reward.div(bonus.numberOfUsers));
+            bonus.lastPaidTime = block.timestamp;
+            emit BonusPaid(bonus.numberOfUsers, reward);
+        }
+    }
+
+    function userRegistered(address user) public view returns(bool) {
+        return bonus.userRegistered[user];
     }
 
     function userBonus(address user) public view returns(uint256) {
-        if (!userAddedToBonus(user)) {
-            return 0;
-        }
-        return bonus.totalPaid.sub(bonus.userPaid[user]).div(bonus.numberOfUsers);
+        return bonus.userRegistered[user] ? bonus.threadPaid.sub(bonus.userPaid[user]) : 0;
     }
 
-    function retrieveBonus() public {
-        msg.sender.transfer(userBonus(msg.sender));
-        bonus.userPaid[msg.sender] = bonus.totalPaid;
+    function retrieveBonus() public payRepBonusIfNeeded {
+        require(bonus.userRegistered[msg.sender]);
+
+        uint256 amount = Math.min(address(this).balance, userBonus(msg.sender));
+        bonus.userPaid[msg.sender] = bonus.userPaid[msg.sender].add(amount);
+        msg.sender.transfer(amount);
     }
 
     function _addUserToBonus(address user) internal {
-        require(bonus.userPaid[user] == 0);
-        bonus.userPaid[user] = bonus.totalPaid;
+        require(!bonus.userRegistered[msg.sender]);
+        payRepresentativeBonus();
+
+        bonus.userRegistered[user] = true;
+        bonus.userPaid[user] = bonus.threadPaid;
         bonus.numberOfUsers = bonus.numberOfUsers.add(1);
         emit UserAddedToBonus(user);
     }
@@ -357,12 +367,13 @@ contract BeeBee is Ownable, UserBonus {
         return address(0);
     }
 
-    function deposit(address ref) public payable {
+    function deposit(address ref) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
         address refAddress = referrerOf(msg.sender, ref);
 
         // Register player
         if (!player.registered) {
+            require(msg.sender != owner(), "Owner can't play");
             player.registered = true;
             player.bees[0] = MAX_BEES_PER_TARIFF;
             totalPlayers++;
@@ -428,19 +439,22 @@ contract BeeBee is Ownable, UserBonus {
         emit Withdrawed(msg.sender, value);
     }
 
-    function collect() public {
+    function collect() public payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
         uint256 collected = earned(msg.sender);
-        player.balanceHoney = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
-        player.balanceWax = collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
-        player.lastTimeCollected = now;
         if (!player.airdropCollected) {
             player.airdropCollected = true;
+            collected = collected.sub(FIRST_BEE_AIRDROP_AMOUNT);
+            player.balanceWax = player.balanceWax.add(FIRST_BEE_AIRDROP_AMOUNT);
         }
+
+        player.balanceHoney = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        player.balanceWax = collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        player.lastTimeCollected = block.timestamp;
     }
 
-    function buyBees(uint256 bee, uint256 count) public payable {
+    function buyBees(uint256 bee, uint256 count) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
         if (msg.value > 0) {
@@ -457,7 +471,7 @@ contract BeeBee is Ownable, UserBonus {
             if (bee == 8) {
                 require(superBeeUnlocked());
             }
-            _payWithWaxOnly(msg.sender, BEES_LEVELS_PRICES[bee]);
+            _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
         }
 
         require(player.bees[bee].add(count) <= MAX_BEES_PER_TARIFF);
@@ -465,10 +479,10 @@ contract BeeBee is Ownable, UserBonus {
         _payWithWaxAndHoney(msg.sender, BEES_PRICES[bee].mul(count));
     }
 
-    function updateQualityLevel() public payable {
+    function updateQualityLevel() public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
-        require(player.qualityLevel < QUALITIES_COUNT);
+        require(player.qualityLevel < QUALITIES_COUNT - 1);
         _payWithHoneyOnly(msg.sender, QUALITY_PRICE[player.qualityLevel + 1]);
         player.qualityLevel++;
         emit QualityUpdated(msg.sender, player.qualityLevel);
@@ -489,11 +503,11 @@ contract BeeBee is Ownable, UserBonus {
         }
 
         return total
-            .mul(now.sub(player.lastTimeCollected))
+            .mul(block.timestamp.sub(player.lastTimeCollected))
             .div(30 days);
     }
 
-    function collectMedals(address user) public {
+    function collectMedals(address user) public payRepBonusIfNeeded {
         Player storage player = players[user];
 
         for (uint i = player.medals; i < MEDALS_COUNT; i++) {
@@ -524,7 +538,7 @@ contract BeeBee is Ownable, UserBonus {
     }
 
     function _addToBonusIfNeeded(address user) internal {
-        if (user != address(0) && !userAddedToBonus(user)) {
+        if (user != address(0) && !bonus.userRegistered[user]) {
             Player storage player = players[user];
 
             if (player.totalDeposited >= 5 ether &&
