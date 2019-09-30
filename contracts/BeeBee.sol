@@ -247,7 +247,7 @@ contract BeeBee is Ownable, UserBonus {
     }
 
     function _addToBonusIfNeeded(address user) internal {
-        if (user != address(0) && !userAddedToBonus(user)) {
+        if (user != address(0) && !bonus.userRegistered[user]) {
             Player storage player = players[user];
 
             if (player.totalDeposited >= 5 ether &&

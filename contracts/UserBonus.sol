@@ -1,5 +1,6 @@
 pragma solidity ^0.5.0;
 
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/ownership/Ownable.sol";
 
@@ -14,6 +15,7 @@ contract UserBonus {
         uint256 threadPaid;
         uint256 lastPaidTime;
         uint256 numberOfUsers;
+        mapping(address => bool) userRegistered;
         mapping(address => uint256) userPaid;
     }
 
@@ -27,11 +29,6 @@ contract UserBonus {
         _;
     }
 
-    modifier onlyRepBonusUser {
-        require(userAddedToBonus(msg.sender));
-        _;
-    }
-
     function payRepresentativeBonus() public {
         if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 days) {
             uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
@@ -42,28 +39,27 @@ contract UserBonus {
         }
     }
 
-    function userAddedToBonus(address user) public view returns(bool) {
-        return bonus.userPaid[user] > 0;
+    function userRegistered(address user) public view returns(bool) {
+        return bonus.userRegistered[user];
     }
 
     function userBonus(address user) public view returns(uint256) {
-        if (!userAddedToBonus(user)) {
-            return 0;
-        }
-        return bonus.threadPaid.sub(bonus.userPaid[user]);
+        return bonus.userRegistered[user] ? bonus.threadPaid.sub(bonus.userPaid[user]) : 0;
     }
 
-    function retrieveBonus() public onlyRepBonusUser payRepBonusIfNeeded {
-        uint256 amount = userBonus(msg.sender);
-        require(amount > 0, "Nothing to retrieve");
-        bonus.userPaid[msg.sender] = bonus.threadPaid;
+    function retrieveBonus() public payRepBonusIfNeeded {
+        require(bonus.userRegistered[msg.sender]);
+
+        uint256 amount = Math.min(address(this).balance, userBonus(msg.sender));
+        bonus.userPaid[msg.sender] = bonus.userPaid[msg.sender].add(amount);
         msg.sender.transfer(amount);
     }
 
     function _addUserToBonus(address user) internal {
+        require(!bonus.userRegistered[msg.sender]);
         payRepresentativeBonus();
 
-        require(bonus.userPaid[user] == 0);
+        bonus.userRegistered[user] = true;
         bonus.userPaid[user] = bonus.threadPaid;
         bonus.numberOfUsers = bonus.numberOfUsers.add(1);
         emit UserAddedToBonus(user);
