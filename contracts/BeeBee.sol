@@ -48,6 +48,9 @@ contract BeeBee is Ownable, UserBonus {
 
     uint256 public maxBalance;
     uint256 public totalPlayers;
+    uint256 public totalDeposited;
+    uint256 public totalWithdrawed;
+    uint256 public totalBeesBought;
     mapping(address => Player) public players;
 
     event Registered(address indexed user, address indexed referrer);
@@ -85,6 +88,7 @@ contract BeeBee is Ownable, UserBonus {
             require(msg.sender != owner(), "Owner can't play");
             player.registered = true;
             player.bees[0] = MAX_BEES_PER_TARIFF;
+            totalBeesBought = totalBeesBought.add(MAX_BEES_PER_TARIFF);
             totalPlayers++;
 
             if (refAddress != address(0)) {
@@ -102,6 +106,7 @@ contract BeeBee is Ownable, UserBonus {
         uint256 wax = msg.value.mul(COINS_PER_ETH);
         player.balanceWax = player.balanceWax.add(wax);
         player.totalDeposited = player.totalDeposited.add(msg.value);
+        totalDeposited = totalDeposited.add(msg.value);
         player.points = player.points.add(wax);
         emit Deposited(msg.sender, msg.value);
 
@@ -144,6 +149,7 @@ contract BeeBee is Ownable, UserBonus {
         uint256 value = amount.div(COINS_PER_ETH);
         player.balanceHoney = player.balanceHoney.sub(amount);
         player.totalWithdrawed = player.totalWithdrawed.add(value);
+        totalWithdrawed = totalWithdrawed.add(value);
         msg.sender.transfer(value);
         emit Withdrawed(msg.sender, value);
     }
@@ -185,6 +191,7 @@ contract BeeBee is Ownable, UserBonus {
 
         require(player.bees[bee].add(count) <= MAX_BEES_PER_TARIFF);
         player.bees[bee] = player.bees[bee].add(count);
+        totalBeesBought = totalBeesBought.add(count);
         _payWithWaxAndHoney(msg.sender, BEES_PRICES[bee].mul(count));
     }
 
