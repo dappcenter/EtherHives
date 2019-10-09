@@ -29,17 +29,17 @@ contract BeeBee is Ownable, UserBonus {
     uint256 public constant BEES_COUNT = 8;
     uint256 public constant MEDALS_COUNT = 10;
     uint256 public constant QUALITIES_COUNT = 6;
-    uint256[BEES_COUNT] public BEES_PRICES = [0, 4000, 20000, 100000, 300000, 1000000, 2000000, 625000];
-    uint256[BEES_COUNT] public BEES_LEVELS_PRICES = [0, 0, 30000, 150000, 450000, 1500000, 3000000, 0];
-    uint256[BEES_COUNT] public BEES_MONTHLY_PERCENTS = [0, 100, 102, 104, 106, 108, 111, 125];
-    uint256[MEDALS_COUNT] public MEDALS_POINTS = [0, 100000, 200000, 520000, 1040000, 2080000, 5200000, 10400000, 15600000, 26100000];
-    uint256[MEDALS_COUNT] public MEDALS_REWARDS = [0, 6250, 12500, 31250, 62500, 125000, 312500, 625000, 937500, 1562500];
+    uint256[BEES_COUNT] public BEES_PRICES = [0e18, 4000e18, 20000e18, 100000e18, 300000e18, 1000000e18, 2000000e18, 625000e18];
+    uint256[BEES_COUNT] public BEES_LEVELS_PRICES = [0e18, 0e18, 30000e18, 150000e18, 450000e18, 1500000e18, 3000000e18, 0];
+    uint256[BEES_COUNT] public BEES_MONTHLY_PERCENTS = [0e18, 100e18, 102e18, 104e18, 106e18, 108e18, 111e18, 125e18];
+    uint256[MEDALS_COUNT] public MEDALS_POINTS = [0e18, 100000e18, 200000e18, 520000e18, 1040000e18, 2080000e18, 5200000e18, 10400000e18, 15600000e18, 26100000e18];
+    uint256[MEDALS_COUNT] public MEDALS_REWARDS = [0e18, 6250e18, 12500e18, 31250e18, 62500e18, 125000e18, 312500e18, 625000e18, 937500e18, 1562500e18];
     uint256[QUALITIES_COUNT] public QUALITY_HONEY_PERCENT = [40, 42, 44, 46, 48, 50];
-    uint256[QUALITIES_COUNT] public QUALITY_PRICE = [0, 50000, 150000, 375000, 750000, 1250000];
+    uint256[QUALITIES_COUNT] public QUALITY_PRICE = [0e18, 50000e18, 150000e18, 375000e18, 750000e18, 1250000e18];
 
     uint256 public constant COINS_PER_ETH = 500000;
     uint256 public constant MAX_BEES_PER_TARIFF = 32;
-    uint256 public constant FIRST_BEE_AIRDROP_AMOUNT = 1000;
+    uint256 public constant FIRST_BEE_AIRDROP_AMOUNT = 1000e18;
     uint256 public constant ADMIN_PERCENT = 10;
     uint256 public constant HONEY_DISCOUNT_PERCENT = 10;
     uint256 public constant SUPERBEE_PERCENT_UNLOCK = 25;
@@ -164,8 +164,12 @@ contract BeeBee is Ownable, UserBonus {
             player.balanceWax = player.balanceWax.add(FIRST_BEE_AIRDROP_AMOUNT);
         }
 
-        player.balanceHoney = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
-        player.balanceWax = collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        player.balanceHoney = player.balanceHoney.add(
+            collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100)
+        );
+        player.balanceWax = player.balanceWax.add(
+            collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100)
+        );
         player.lastTimeCollected = block.timestamp;
     }
 
