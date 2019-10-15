@@ -322,7 +322,7 @@ contract BeeBee is Ownable, UserBonus {
     uint256 public constant QUALITIES_COUNT = 6;
     uint256[BEES_COUNT] public BEES_PRICES = [0e18, 4000e18, 20000e18, 100000e18, 300000e18, 1000000e18, 2000000e18, 625000e18];
     uint256[BEES_COUNT] public BEES_LEVELS_PRICES = [0e18, 0e18, 30000e18, 150000e18, 450000e18, 1500000e18, 3000000e18, 0];
-    uint256[BEES_COUNT] public BEES_MONTHLY_PERCENTS = [0e18, 100e18, 102e18, 104e18, 106e18, 108e18, 111e18, 125e18];
+    uint256[BEES_COUNT] public BEES_MONTHLY_PERCENTS = [0, 100, 102, 104, 106, 108, 111, 125];
     uint256[MEDALS_COUNT] public MEDALS_POINTS = [0e18, 100000e18, 200000e18, 520000e18, 1040000e18, 2080000e18, 5200000e18, 10400000e18, 15600000e18, 26100000e18];
     uint256[MEDALS_COUNT] public MEDALS_REWARDS = [0e18, 6250e18, 12500e18, 31250e18, 62500e18, 125000e18, 312500e18, 625000e18, 937500e18, 1562500e18];
     uint256[QUALITIES_COUNT] public QUALITY_HONEY_PERCENT = [40, 42, 44, 46, 48, 50];
@@ -350,6 +350,10 @@ contract BeeBee is Ownable, UserBonus {
     event ReferrerPaid(address indexed user, address indexed referrer, uint256 indexed level, uint256 amount);
     event MedalAwarded(address indexed user, uint256 indexed medal);
     event QualityUpdated(address indexed user, uint256 indexed quality);
+
+    function playerBees(address who) public view returns(uint256[BEES_COUNT] memory) {
+        return players[who].bees;
+    }
 
     function superBeeUnlocked() public view returns(bool) {
         uint256 adminWithdrawed = players[owner()].totalWithdrawed;
@@ -379,6 +383,7 @@ contract BeeBee is Ownable, UserBonus {
             require(msg.sender != owner(), "Owner can't play");
             player.registered = true;
             player.bees[0] = MAX_BEES_PER_TARIFF;
+            player.lastTimeCollected = block.timestamp;
             totalBeesBought = totalBeesBought.add(MAX_BEES_PER_TARIFF);
             totalPlayers++;
 
@@ -501,13 +506,12 @@ contract BeeBee is Ownable, UserBonus {
 
     function earned(address user) public view returns(uint256) {
         Player storage player = players[user];
-
-        uint256 total = 0;
-        if (!player.airdropCollected) {
-            total = total.add(FIRST_BEE_AIRDROP_AMOUNT);
+        if (!player.registered) {
+            return 0;
         }
 
-        for (uint i = 0; i < BEES_COUNT; i++) {
+        uint256 total = 0;
+        for (uint i = 1; i < BEES_COUNT; i++) {
             total = total.add(
                 player.bees[i].mul(BEES_PRICES[i]).mul(BEES_MONTHLY_PERCENTS[i]).div(100)
             );
@@ -515,7 +519,8 @@ contract BeeBee is Ownable, UserBonus {
 
         return total
             .mul(block.timestamp.sub(player.lastTimeCollected))
-            .div(30 days);
+            .div(30 days)
+            .add(player.airdropCollected ? 0 : FIRST_BEE_AIRDROP_AMOUNT);
     }
 
     function collectMedals(address user) public payRepBonusIfNeeded {
