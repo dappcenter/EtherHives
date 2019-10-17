@@ -231,7 +231,7 @@ contract UserBonus {
 
     using SafeMath for uint256;
 
-    uint256 public constant BONUS_PERCENTS_PER_DAY = 1;
+    uint256 public constant BONUS_PERCENTS_PER_WEEK = 1;
 
     struct UserBonusData {
         uint256 threadPaid;
@@ -252,9 +252,9 @@ contract UserBonus {
     }
 
     function payRepresentativeBonus() public {
-        if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 days) {
-            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_DAY).div(100)
-                .mul(block.timestamp.sub(bonus.lastPaidTime)).div(1 days);
+        if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 weeks) {
+            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_WEEK).div(100)
+                .mul(block.timestamp.sub(bonus.lastPaidTime)).div(1 weeks);
             bonus.threadPaid = bonus.threadPaid.add(reward.div(bonus.numberOfUsers));
             bonus.lastPaidTime = block.timestamp;
             emit BonusPaid(bonus.numberOfUsers, reward);
@@ -270,7 +270,7 @@ contract UserBonus {
     }
 
     function retrieveBonus() public payRepBonusIfNeeded {
-        require(bonus.userRegistered[msg.sender]);
+        require(bonus.userRegistered[msg.sender], "User not registered for bonus");
 
         uint256 amount = Math.min(address(this).balance, userBonus(msg.sender));
         bonus.userPaid[msg.sender] = bonus.userPaid[msg.sender].add(amount);
@@ -278,7 +278,7 @@ contract UserBonus {
     }
 
     function _addUserToBonus(address user) internal {
-        require(!bonus.userRegistered[msg.sender]);
+        require(!bonus.userRegistered[msg.sender], "User already registered for bonus");
         payRepresentativeBonus();
 
         bonus.userRegistered[user] = true;
@@ -308,6 +308,7 @@ contract BeeBee is Ownable, UserBonus {
         uint256 medals;
         uint256 qualityLevel;
         uint256 lastTimeCollected;
+        uint256 unlockedBee;
         uint256[BEES_COUNT] bees;
 
         uint256 totalDeposited;
@@ -406,7 +407,7 @@ contract BeeBee is Ownable, UserBonus {
         player.points = player.points.add(wax);
         emit Deposited(msg.sender, msg.value);
 
-        collectMedals(msg.sender);
+        // collectMedals(msg.sender);
 
         // Pay admin fee fees
         players[owner()].balanceHoney = players[owner()].balanceHoney.add(
@@ -424,7 +425,7 @@ contract BeeBee is Ownable, UserBonus {
                 players[to].balanceHoney = players[to].balanceHoney.add(reward);
                 players[to].points = players[to].points.add(wax.mul(REFERRAL_POINT_PERCENT[i]).div(100));
                 emit ReferrerPaid(msg.sender, to, i + 1, reward);
-                collectMedals(to);
+                // collectMedals(to);
 
                 to = players[to].referrer;
             }
@@ -469,6 +470,22 @@ contract BeeBee is Ownable, UserBonus {
         player.lastTimeCollected = block.timestamp;
     }
 
+    function unlock(uint256 bee) public payable payRepBonusIfNeeded {
+        Player storage player = players[msg.sender];
+
+        require(player.bees[bee - 1] == MAX_BEES_PER_TARIFF, "Prev level must be filled");
+        require(bee == player.unlockedBee + 1, "Trying to unlock wrong bee type");
+
+        if (bee == 7) {
+            require(player.medals >= 9);
+        }
+        if (bee == 8) {
+            require(superBeeUnlocked());
+        }
+        _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
+        player.unlockedBee = bee;
+    }
+
     function buyBees(uint256 bee, uint256 count) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
@@ -478,16 +495,8 @@ contract BeeBee is Ownable, UserBonus {
 
         collect();
 
-        require(bee < 2 || player.bees[bee - 1] == MAX_BEES_PER_TARIFF);
-        if (player.bees[bee] == 0) {
-            if (bee == 7) {
-                require(player.medals >= 9);
-            }
-            if (bee == 8) {
-                require(superBeeUnlocked());
-            }
-            _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
-        }
+        require(bee > 0, "Don't try to buy bees of type 0");
+        require(bee <= player.unlockedBee, "This bee type not unlocked yet");
 
         require(player.bees[bee].add(count) <= MAX_BEES_PER_TARIFF);
         player.bees[bee] = player.bees[bee].add(count);
@@ -527,7 +536,7 @@ contract BeeBee is Ownable, UserBonus {
         Player storage player = players[user];
 
         for (uint i = player.medals; i < MEDALS_COUNT; i++) {
-            if (player.points > MEDALS_POINTS[i]) {
+            if (player.points >= MEDALS_POINTS[i]) {
                 player.balanceWax = player.balanceWax.add(MEDALS_REWARDS[i]);
                 player.medals = i + 1;
                 emit MedalAwarded(user, i + 1);
