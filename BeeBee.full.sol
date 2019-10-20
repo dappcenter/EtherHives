@@ -352,6 +352,16 @@ contract BeeBee is Ownable, UserBonus {
     event MedalAwarded(address indexed user, uint256 indexed medal);
     event QualityUpdated(address indexed user, uint256 indexed quality);
 
+    function() external payable {
+        if (msg.value == 0) {
+            if (players[msg.sender].registered) {
+                collect();
+            }
+        } else {
+            deposit(address(0));
+        }
+    }
+
     function playerBees(address who) public view returns(uint256[BEES_COUNT] memory) {
         return players[who].bees;
     }
@@ -366,13 +376,10 @@ contract BeeBee is Ownable, UserBonus {
     }
 
     function referrerOf(address user, address ref) public view returns(address) {
-        if (players[user].referrer != address(0)) {
-            return players[user].referrer;
-        }
-        if (players[user].totalDeposited == 0) {
+        if (!players[user].registered) {
             return ref;
         }
-        return address(0);
+        return players[user].referrer;
     }
 
     function deposit(address ref) public payable payRepBonusIfNeeded {
@@ -453,6 +460,7 @@ contract BeeBee is Ownable, UserBonus {
 
     function collect() public payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
+        require(player.registered, "Not registered yet");
 
         uint256 collected = earned(msg.sender);
         if (!player.airdropCollected) {
