@@ -391,6 +391,7 @@ contract BeeBee is Ownable, UserBonus {
             require(msg.sender != owner(), "Owner can't play");
             player.registered = true;
             player.bees[0] = MAX_BEES_PER_TARIFF;
+            player.unlockedBee = 1;
             player.lastTimeCollected = block.timestamp;
             totalBeesBought = totalBeesBought.add(MAX_BEES_PER_TARIFF);
             totalPlayers++;
@@ -481,6 +482,7 @@ contract BeeBee is Ownable, UserBonus {
     function unlock(uint256 bee) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
+        require(bee < BEES_COUNT, "No more levels to unlock");
         require(player.bees[bee - 1] == MAX_BEES_PER_TARIFF, "Prev level must be filled");
         require(bee == player.unlockedBee + 1, "Trying to unlock wrong bee type");
 
@@ -492,6 +494,7 @@ contract BeeBee is Ownable, UserBonus {
         }
         _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
         player.unlockedBee = bee;
+        player.bees[bee] = 1;
     }
 
     function buyBees(uint256 bee, uint256 count) public payable payRepBonusIfNeeded {
