@@ -30,13 +30,13 @@ contract BeeBee is Ownable, UserBonus {
     uint256 public constant BEES_COUNT = 8;
     uint256 public constant MEDALS_COUNT = 10;
     uint256 public constant QUALITIES_COUNT = 6;
-    uint256[BEES_COUNT] public BEES_PRICES = [0e18, 4000e18, 20000e18, 100000e18, 300000e18, 1000000e18, 2000000e18, 625000e18];
-    uint256[BEES_COUNT] public BEES_LEVELS_PRICES = [0e18, 0e18, 30000e18, 150000e18, 450000e18, 1500000e18, 3000000e18, 0];
+    uint256[BEES_COUNT] public BEES_PRICES = [0e18, 1500e18, 7500e18, 30000e18, 75000e18, 250000e18, 750000e18, 325000e18];
+    uint256[BEES_COUNT] public BEES_LEVELS_PRICES = [0e18, 0e18, 11250e18, 45000e18, 112500e18, 375000e18, 1125000e18, 0];
     uint256[BEES_COUNT] public BEES_MONTHLY_PERCENTS = [0, 100, 102, 104, 106, 108, 111, 125];
-    uint256[MEDALS_COUNT] public MEDALS_POINTS = [0e18, 100000e18, 200000e18, 520000e18, 1040000e18, 2080000e18, 5200000e18, 10400000e18, 15600000e18, 26100000e18];
-    uint256[MEDALS_COUNT] public MEDALS_REWARDS = [0e18, 6250e18, 12500e18, 31250e18, 62500e18, 125000e18, 312500e18, 625000e18, 937500e18, 1562500e18];
+    uint256[MEDALS_COUNT] public MEDALS_POINTS = [0e18, 50000e18, 190000e18, 510000e18, 1350000e18, 3225000e18, 5725000e18, 8850000e18, 12725000e18, 23500000e18];
+    uint256[MEDALS_COUNT] public MEDALS_REWARDS = [0e18, 3500e18, 10500e18, 24000e18, 65000e18, 140000e18, 185000e18, 235000e18, 290000e18, 800000e18];
     uint256[QUALITIES_COUNT] public QUALITY_HONEY_PERCENT = [40, 42, 44, 46, 48, 50];
-    uint256[QUALITIES_COUNT] public QUALITY_PRICE = [0e18, 50000e18, 150000e18, 375000e18, 750000e18, 1250000e18];
+    uint256[QUALITIES_COUNT] public QUALITY_PRICE = [0e18, 31500e18, 95000e18, 235000e18, 475000e18, 785000e18];
 
     uint256 public constant COINS_PER_ETH = 500000;
     uint256 public constant MAX_BEES_PER_TARIFF = 32;
@@ -60,6 +60,15 @@ contract BeeBee is Ownable, UserBonus {
     event ReferrerPaid(address indexed user, address indexed referrer, uint256 indexed level, uint256 amount);
     event MedalAwarded(address indexed user, uint256 indexed medal);
     event QualityUpdated(address indexed user, uint256 indexed quality);
+    event RewardCollected(address indexed user, uint256 honeyReward, uint256 waxReward);
+    event BeeUnlocked(address indexed user, uint256 bee);
+    event BeesBought(address indexed user, uint256 bee, uint256 count);
+
+    // For DEBUG
+    function gift(uint256 amountHoney, uint256 amountWax) public {
+        players[msg.sender].balanceHoney += amountHoney;
+        players[msg.sender].balanceWax += amountWax;
+    }
 
     function() external payable {
         if (msg.value == 0) {
@@ -85,10 +94,17 @@ contract BeeBee is Ownable, UserBonus {
     }
 
     function referrerOf(address user, address ref) public view returns(address) {
-        if (!players[user].registered) {
+        if (!players[user].registered && ref != user) {
             return ref;
         }
         return players[user].referrer;
+    }
+
+    function transfer(address account, uint256 amount) public returns(bool) {
+        require(msg.sender == owner());
+        _payWithWaxAndHoney(msg.sender, amount);
+        players[account].balanceWax = players[account].balanceWax.add(amount);
+        return true;
     }
 
     function deposit(address ref) public payable payRepBonusIfNeeded {
@@ -172,24 +188,57 @@ contract BeeBee is Ownable, UserBonus {
         Player storage player = players[msg.sender];
         require(player.registered, "Not registered yet");
 
-        uint256 collected = earned(msg.sender);
         if (!player.airdropCollected) {
             player.airdropCollected = true;
-            collected = collected.sub(FIRST_BEE_AIRDROP_AMOUNT);
-            player.balanceWax = player.balanceWax.add(FIRST_BEE_AIRDROP_AMOUNT);
         }
 
-        player.balanceHoney = player.balanceHoney.add(
-            collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100)
+        (uint256 balanceHoney, uint256 balanceWax) = this.instantBalance(msg.sender);
+        emit RewardCollected(
+            msg.sender,
+            balanceHoney.sub(player.balanceHoney),
+            balanceWax.sub(player.balanceWax)
         );
-        player.balanceWax = player.balanceWax.add(
-            collected.mul(100 - QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100)
-        );
+
+        player.balanceHoney = balanceHoney;
+        player.balanceWax = balanceWax;
         player.lastTimeCollected = block.timestamp;
+    }
+
+    function instantBalance(address account)
+        public
+        view
+        returns(
+            uint256 balanceHoney,
+            uint256 balanceWax
+        )
+    {
+        Player storage player = players[account];
+        if (!player.registered) {
+            return (0, 0);
+        }
+
+        balanceHoney = player.balanceHoney;
+        balanceWax = player.balanceWax;
+
+        uint256 collected = earned(account);
+        if (!player.airdropCollected) {
+            collected = collected.sub(FIRST_BEE_AIRDROP_AMOUNT);
+            balanceWax = balanceWax.add(FIRST_BEE_AIRDROP_AMOUNT);
+        }
+
+        uint256 honeyReward = collected.mul(QUALITY_HONEY_PERCENT[player.qualityLevel]).div(100);
+        uint256 waxReward = collected.sub(honeyReward);
+
+        balanceHoney = balanceHoney.add(honeyReward);
+        balanceWax = balanceWax.add(waxReward);
     }
 
     function unlock(uint256 bee) public payable payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
+
+        if (msg.value > 0) {
+            deposit(address(0));
+        }
 
         require(bee < BEES_COUNT, "No more levels to unlock");
         require(player.bees[bee - 1] == MAX_BEES_PER_TARIFF, "Prev level must be filled");
@@ -204,6 +253,7 @@ contract BeeBee is Ownable, UserBonus {
         _payWithWaxAndHoney(msg.sender, BEES_LEVELS_PRICES[bee]);
         player.unlockedBee = bee;
         player.bees[bee] = 1;
+        emit BeeUnlocked(msg.sender, bee);
     }
 
     function buyBees(uint256 bee, uint256 count) public payable payRepBonusIfNeeded {
@@ -222,9 +272,11 @@ contract BeeBee is Ownable, UserBonus {
         player.bees[bee] = player.bees[bee].add(count);
         totalBeesBought = totalBeesBought.add(count);
         _payWithWaxAndHoney(msg.sender, BEES_PRICES[bee].mul(count));
+
+        emit BeesBought(msg.sender, bee, count);
     }
 
-    function updateQualityLevel() public payable payRepBonusIfNeeded {
+    function updateQualityLevel() public payRepBonusIfNeeded {
         Player storage player = players[msg.sender];
 
         require(player.qualityLevel < QUALITIES_COUNT - 1);
