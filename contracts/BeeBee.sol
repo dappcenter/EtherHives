@@ -4,8 +4,30 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/ownership/Ownable.sol";
 import "./UserBonus.sol";
 
+contract Claimable is Ownable {
 
-contract BeeBee is Ownable, UserBonus {
+    address public pendingOwner;
+
+    modifier onlyPendingOwner() {
+        require(msg.sender == pendingOwner);
+        _;
+    }
+
+    function renounceOwnership() public onlyOwner {
+        revert();
+    }
+
+    function transferOwnership(address newOwner) public onlyOwner {
+        pendingOwner = newOwner;
+    }
+
+    function claimOwnership() public onlyPendingOwner {
+        _transferOwnership(pendingOwner);
+        delete pendingOwner;
+    }
+}
+
+contract BeeBee is Claimable, UserBonus {
 
     struct Player {
         bool registered;
@@ -93,7 +115,7 @@ contract BeeBee is Ownable, UserBonus {
         return players[user].referrals;
     }
 
-    function referrerOf(address user, address ref) public view returns(address) {
+    function referrerOf(address user, address ref) internal view returns(address) {
         if (!players[user].registered && ref != user) {
             return ref;
         }
