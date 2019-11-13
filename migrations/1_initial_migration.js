@@ -1,7 +1,7 @@
 const Migrations = artifacts.require('./Migrations.sol');
-const BeeBee = artifacts.require('./BeeBee.sol');
+const EtherHives = artifacts.require('./EtherHives.sol');
 
 module.exports = function (deployer) {
     deployer.deploy(Migrations);
-    deployer.deploy(BeeBee);
+    deployer.deploy(EtherHives);
 };

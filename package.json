@@ -1,10 +1,10 @@
 {
-  "name": "BeeBee",
+  "name": "EtherHives",
   "version": "0.0.1",
   "description": "",
   "repository": {
     "type": "git",
-    "url": "git@github.com:EtherHives/BeeBee.git"
+    "url": "git@github.com:EtherHives/EtherHives.git"
   },
   "license": "MIT",
   "dependencies": {
@@ -37,6 +37,6 @@
     "lint:sol:fix": "solium -d . --fix",
     "lint": "npm run lint:js && npm run lint:sol",
     "lint:fix": "npm run lint:js:fix && npm run lint:sol:fix",
-    "dist": "truffle-flattener ./contracts/BeeBee.sol > BeeBee.full.sol && solcjs --bin --abi --optimize BeeBee.full.sol && mv BeeBee_full_sol_BeeBee.bin BeeBee.full.bin && mv BeeBee_full_sol_BeeBee.abi BeeBee.full.abi && rm *_sol_*"
+    "dist": "truffle-flattener ./contracts/EtherHives.sol > EtherHives.full.sol && solcjs --bin --abi --optimize EtherHives.full.sol && mv EtherHives_full_sol_EtherHives.bin EtherHives.full.bin && mv EtherHives_full_sol_EtherHives.abi EtherHives.full.abi && rm *_sol_*"
   }
 }

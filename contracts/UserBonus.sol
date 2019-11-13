@@ -10,6 +10,7 @@ contract UserBonus {
     using SafeMath for uint256;
 
     uint256 public constant BONUS_PERCENTS_PER_WEEK = 1;
+    uint256 public constant BONUS_TIME = 1 weeks;
 
     struct UserBonusData {
         uint256 threadPaid;
@@ -30,34 +31,40 @@ contract UserBonus {
     }
 
     function payRepresentativeBonus() public {
-        if (bonus.numberOfUsers > 0 && bonus.lastPaidTime.sub(block.timestamp) > 1 weeks) {
-            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_WEEK).div(100)
-                .mul(block.timestamp.sub(bonus.lastPaidTime)).div(1 weeks);
+        while (bonus.numberOfUsers > 0 && bonus.lastPaidTime.add(BONUS_TIME) <= block.timestamp) {
+            uint256 reward = address(this).balance.mul(BONUS_PERCENTS_PER_WEEK).div(100);
             bonus.threadPaid = bonus.threadPaid.add(reward.div(bonus.numberOfUsers));
-            bonus.lastPaidTime = block.timestamp;
+            bonus.lastPaidTime = bonus.lastPaidTime.add(BONUS_TIME);
             emit BonusPaid(bonus.numberOfUsers, reward);
         }
     }
 
-    function userRegistered(address user) public view returns(bool) {
+    function userRegisteredForBonus(address user) public view returns(bool) {
         return bonus.userRegistered[user];
     }
 
-    function userBonus(address user) public view returns(uint256) {
+    function userBonusPaid(address user) public view returns(uint256) {
+        return bonus.userPaid[user];
+    }
+
+    function userBonusEarned(address user) public view returns(uint256) {
         return bonus.userRegistered[user] ? bonus.threadPaid.sub(bonus.userPaid[user]) : 0;
     }
 
     function retrieveBonus() public payRepBonusIfNeeded {
         require(bonus.userRegistered[msg.sender], "User not registered for bonus");
 
-        uint256 amount = Math.min(address(this).balance, userBonus(msg.sender));
+        uint256 amount = Math.min(address(this).balance, userBonusEarned(msg.sender));
         bonus.userPaid[msg.sender] = bonus.userPaid[msg.sender].add(amount);
         msg.sender.transfer(amount);
     }
 
-    function _addUserToBonus(address user) internal {
+    function _addUserToBonus(address user) internal payRepBonusIfNeeded {
         require(!bonus.userRegistered[msg.sender], "User already registered for bonus");
-        payRepresentativeBonus();
+
+        if (bonus.numberOfUsers == 0) {
+            bonus.lastPaidTime = block.timestamp;
+        }
 
         bonus.userRegistered[user] = true;
         bonus.userPaid[user] = bonus.threadPaid;
